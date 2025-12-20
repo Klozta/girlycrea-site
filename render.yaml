@@ -1,9 +1,6 @@
 # Configuration Render pour déploiement automatique
 # Ce fichier permet de configurer le service directement depuis le repo
-<<<<<<< HEAD
 # IMPORTANT: Ce fichier force npm au lieu de Docker
-=======
->>>>>>> 25f810408b4f627998650a5a6baa83ea33ba6479
 
 services:
   - type: web
@@ -14,7 +11,6 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     rootDir: girlycrea-site/backend
-<<<<<<< HEAD
     # Désactiver Docker explicitement
     dockerfilePath: ""
     envVars:
@@ -24,11 +20,6 @@ services:
         value: "10000"
       - key: HOST
         value: "0.0.0.0"
-=======
-    envVars:
-      - key: NODE_ENV
-        value: production
->>>>>>> 25f810408b4f627998650a5a6baa83ea33ba6479
       - key: SUPABASE_URL
         sync: false  # À configurer manuellement dans Render Dashboard
       - key: SUPABASE_KEY
