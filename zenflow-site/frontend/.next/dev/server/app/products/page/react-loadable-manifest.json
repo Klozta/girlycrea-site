@@ -1,0 +1,23 @@
+{
+  "[project]/components/PWAInstallPrompt.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/components/PWAInstallPrompt.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/components_PWAInstallPrompt_tsx_26e74489._.js",
+      "static/chunks/components_PWAInstallPrompt_tsx_0a789402._.js"
+    ]
+  },
+  "[project]/components/ScrollToTop.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/components/ScrollToTop.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/components_ScrollToTop_tsx_5d5ab42c._.js",
+      "static/chunks/components_ScrollToTop_tsx_0a789402._.js"
+    ]
+  },
+  "[project]/components/Chatbot.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/components/Chatbot.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/_30c55d6f._.js",
+      "static/chunks/components_Chatbot_tsx_0a789402._.js"
+    ]
+  }
+}
