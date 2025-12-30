@@ -109,10 +109,13 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Autoriser localhost avec différents ports en dev
+    // Autoriser localhost et IP locales en dev
     if (process.env.NODE_ENV === 'development' && origin && (
       origin.startsWith('http://localhost:') ||
-      origin.startsWith('http://127.0.0.1:')
+      origin.startsWith('http://127.0.0.1:') ||
+      origin.startsWith('http://192.168.') ||
+      origin.startsWith('http://172.') ||
+      origin.startsWith('http://10.')
     )) {
       return callback(null, true);
     }

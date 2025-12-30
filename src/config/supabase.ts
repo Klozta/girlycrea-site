@@ -1,8 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
 
-// En mode développement, permettre des valeurs mock si Supabase n'est pas configuré
+// Support pour PostgreSQL direct (VPS) ou Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
+const databaseUrl = process.env.DATABASE_URL;
+
+// Créer un pool PostgreSQL direct si DATABASE_URL est fourni (VPS)
+let pgPool: pg.Pool | null = null;
+if (databaseUrl && databaseUrl.startsWith('postgresql://')) {
+  try {
+    pgPool = new pg.Pool({
+      connectionString: databaseUrl,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+    console.log('✅ PostgreSQL direct pool créé (mode VPS)');
+  } catch (error) {
+    console.error('❌ Erreur création pool PostgreSQL:', error);
+  }
+}
+
+// Export du pool PostgreSQL pour utilisation directe si nécessaire
+export { pgPool };
 
 // Vérifier si ce sont des placeholders
 const isPlaceholder = (value: string | undefined): boolean => {

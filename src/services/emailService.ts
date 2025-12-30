@@ -101,9 +101,14 @@ export function generateOrderConfirmationEmailHTML(params: {
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
     const emailProvider = process.env.EMAIL_PROVIDER || 'resend';
-    const fromEmail = options.from || process.env.EMAIL_FROM || 'noreply@girlycrea.com';
+    const fromEmail = options.from || process.env.EMAIL_FROM || process.env.SMTP_FROM || 'noreply@girlycrea.com';
 
-    if (emailProvider === 'resend') {
+    if (emailProvider === 'smtp' || emailProvider === 'nodemailer') {
+      return await sendEmailSMTP({
+        ...options,
+        from: fromEmail,
+      });
+    } else if (emailProvider === 'resend') {
       return await sendEmailResend({
         ...options,
         from: fromEmail,
@@ -169,6 +174,70 @@ async function sendEmailMailgun(options: EmailOptions): Promise<boolean> {
     return false;
   } catch (error: any) {
     logger.error('Erreur Mailgun API', error, { to: options.to });
+    return false;
+  }
+}
+
+/**
+ * Envoie un email via SMTP/Nodemailer (pour VPS local)
+ * Nécessite: npm install nodemailer
+ * Variables: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+ */
+async function sendEmailSMTP(options: EmailOptions): Promise<boolean> {
+  try {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpSecure = process.env.SMTP_SECURE === 'true';
+
+    if (!smtpHost) {
+      logger.warn('SMTP_HOST non configuré - email non envoyé');
+      return false;
+    }
+
+    // Import dynamique de nodemailer
+    const nodemailer = await import('nodemailer');
+    const { default: createTransport } = nodemailer;
+
+    const transporter = createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure, // true pour 465, false pour autres ports
+      auth: smtpUser && smtpPass ? {
+        user: smtpUser,
+        pass: smtpPass,
+      } : undefined,
+      tls: {
+        rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== 'false',
+      },
+    });
+
+    const mailOptions: any = {
+      from: options.from || process.env.SMTP_FROM || 'noreply@girlycrea.com',
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+    };
+
+    // Ajouter les attachments si présents
+    if (options.attachments && options.attachments.length > 0) {
+      mailOptions.attachments = options.attachments.map((att) => ({
+        filename: att.filename,
+        content: att.content,
+        contentType: att.contentType,
+      }));
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    logger.info('Email envoyé via SMTP', { to: options.to, messageId: info.messageId });
+    return true;
+  } catch (error: any) {
+    if (error.message?.includes('Cannot find module')) {
+      logger.warn('Package "nodemailer" non installé. Installer avec: npm install nodemailer');
+      return false;
+    }
+    logger.error('Erreur SMTP', error, { to: options.to });
     return false;
   }
 }

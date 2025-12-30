@@ -1,68 +1,56 @@
 /**
- * Barrel export pour tous les utils
- * Facilite les imports
+ * Exports centralisés des utils
+ * Facilite l'importation des helpers
  */
 
-// Cache
-export * from './cache.js';
-export * from './cacheInvalidation.js';
-
-// Logging
-export * from './logger.js';
-export * from './logSanitizer.js';
-export * from './securityLogger.js';
-export * from './structuredLogger.js';
-
-// Validation
-export * from './validationHelpers.js';
-
-// Performance
-export * from './performance.js';
-
-// Security
-export * from './securityHelpers.js';
-
-// Strings
-export * from './stringHelpers.js';
-
-// Dates
-export * from './dateHelpers.js';
-
-// Arrays
-export * from './arrayHelpers.js';
-
-// Rate limiting
-export * from './rateLimiter.js';
-
-// Retry
-export * from './retry.js';
-
-// Request
-export * from './requestHelpers.js';
-
-// Database
-export * from './databaseHelpers.js';
-
-// Encryption
-export * from './encryptionHelpers.js';
-
-// Email - Exporter seulement les fonctions uniques (éviter les doublons)
+// Error handlers
 export {
-  getEmailDomain,
-  isTestEmail
-} from './emailHelpers.js';
-// Note: isValidEmail, normalizeEmail, maskEmail sont exportés depuis securityHelpers, stringHelpers, validationHelpers
-// pour éviter les conflits, on ne les exporte pas depuis emailHelpers
+  handleServiceError,
+  handleSupabaseError,
+  handleExternalServiceError,
+  isRetryableError,
+  withErrorHandling,
+} from './errorHandlers.js';
 
-// Metrics
-export * from './metricsHelpers.js';
-
-// Error Handlers
-export * from './errorHandlers.js';
-
-// Advanced utilities
-export * from './advancedCache.js';
-// Note: retryWithBackoff est exporté depuis performance.js, on exporte seulement les fonctions uniques depuis advancedRetry
+// Database helpers
 export {
-  CircuitBreaker, isRetryableError, RetryError
-} from './advancedRetry.js';
+  tableExists,
+  countRecords,
+  recordExists,
+  cleanDataForInsert,
+  findById,
+  findByUserId,
+  paginateQuery,
+  insertOne,
+  updateById,
+  deleteById,
+} from './databaseHelpers.js';
+
+// Query helpers
+export {
+  parsePagination,
+  parsePriceRange,
+  parseDateRange,
+  parseArray,
+  parseBoolean,
+  parseInteger,
+  parseAndValidate,
+  paginationSchema,
+  priceRangeSchema,
+  dateRangeSchema,
+  getAllQueryParams,
+} from './queryHelpers.js';
+
+// Metrics helpers
+export {
+  escapeCsvValue,
+  calculateDateRange,
+  calculateTrend,
+  calculateZScore,
+  calculateMADScore,
+  dateFilterSchema,
+} from './metricsHelpers.js';
+
+// Autres utils existants
+export { logger } from './logger.js';
+export { createError, AppError } from './errors.js';
