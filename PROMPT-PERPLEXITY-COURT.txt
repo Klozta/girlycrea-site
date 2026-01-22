@@ -1,0 +1,28 @@
+Je développe une application e-commerce (Node.js/Express + Next.js) actuellement hébergée avec services externes payants (~81€/mois : Supabase PostgreSQL, Upstash Redis, Resend emails, Sentry monitoring).
+
+Je veux migrer vers un VPS Ubuntu dédié pour réduire les coûts à <15€/mois.
+
+Questions principales :
+
+1. **Stack recommandée** : Quelle combinaison d'outils recommandez-vous pour migrer PostgreSQL, Redis, emails et monitoring vers un VPS Ubuntu ? (PM2 vs systemd vs Docker, Nginx vs Caddy, Postfix vs SMTP externe gratuit, Prometheus vs Netdata)
+
+2. **Alternatives innovantes 2024-2025** : Y a-t-il des outils/services récents que je devrais considérer pour gagner du temps ou de l'argent ?
+
+3. **Gain réel** : Quelle est l'économie réelle après migration (coûts VPS + maintenance) ? Quels services externes valent vraiment la peine de garder payants (ex: Stripe) ?
+
+4. **Outils DevOps** : Quels outils open-source peuvent vraiment automatiser la migration et le déploiement pour gagner du temps ?
+
+5. **Pièges à éviter** : Quelles sont les erreurs courantes lors d'une migration VPS que je devrais éviter ?
+
+6. **Optimisations** : Quelles optimisations peuvent améliorer significativement les performances sans coût supplémentaire ? (PgBouncer, Varnish, Cloudflare gratuit)
+
+7. **Backup stratégie** : Quelle stratégie de backup recommandez-vous (PostgreSQL, fichiers) avec outils open-source ?
+
+8. **Migration progressive** : Est-il possible de migrer progressivement (DB d'abord, puis Redis) ou faut-il tout migrer d'un coup ?
+
+Contraintes : Budget <15€/mois, migration en 1-2 jours, niveau intermédiaire Linux, pas de downtime >1h, support 1000-5000 utilisateurs/jour.
+
+Merci de prioriser les solutions qui réduisent vraiment les coûts, sont maintenables à long terme, gagnent du temps en automatisation et sont fiables pour un e-commerce en production.
+
+
+

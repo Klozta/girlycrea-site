@@ -5,13 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import { toast } from 'react-hot-toast';
-import { CreditCard, MapPin, User, CheckCircle } from 'lucide-react';
+import { CreditCard, MapPin, User, CheckCircle, Tag } from 'lucide-react';
+import CouponInput from '@/components/CouponInput';
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { cart, isAuthenticated, clearCart } = useStore();
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'shipping' | 'payment' | 'confirmation'>('shipping');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -55,7 +57,8 @@ export default function CheckoutPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shipping = subtotal >= 50 ? 0 : 5.99;
-  const total = subtotal + shipping;
+  const discount = appliedCoupon?.discount || 0;
+  const total = Math.max(0, subtotal + shipping - discount);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +92,7 @@ export default function CheckoutPage() {
             country: formData.country,
             phone: formData.phone,
           },
+          couponCode: appliedCoupon?.code,
         };
 
         const order = await api.createOrder(orderData);
@@ -275,11 +279,31 @@ export default function CheckoutPage() {
                 </div>
               ))}
 
+              {/* Coupon */}
+              <div className="border-t pt-4">
+                <h3 className="font-medium mb-3 flex items-center gap-2">
+                  <Tag className="w-4 h-4" />
+                  Code promo
+                </h3>
+                <CouponInput
+                  orderTotal={subtotal}
+                  onCouponApplied={setAppliedCoupon}
+                  onCouponRemoved={() => setAppliedCoupon(null)}
+                  appliedCoupon={appliedCoupon}
+                />
+              </div>
+
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
                   <span>Sous-total</span>
                   <span>{subtotal.toFixed(2)} €</span>
                 </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Réduction ({appliedCoupon?.code})</span>
+                    <span>-{discount.toFixed(2)} €</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Livraison</span>
                   <span>{shipping === 0 ? 'Gratuite' : `${shipping.toFixed(2)} €`}</span>
@@ -296,5 +320,6 @@ export default function CheckoutPage() {
     </div>
   );
 }
+
 
 

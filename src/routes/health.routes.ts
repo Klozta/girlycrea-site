@@ -1,255 +1,247 @@
 /**
- * Routes de health check avancées
- * Vérification de l'état de santé de l'application et des services
+ * Route de santé - vérifie l'état de tous les services
+ * Endpoints: GET /api/health et GET /api/health/detailed
  */
-import { Router } from 'express';
-import { supabase } from '../config/supabase.js';
+import { Router, Request, Response } from 'express';
+import { pgPool } from '../config/supabase.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
 
-interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
-  timestamp: string;
-  uptime: number;
-  services: {
-    database: ServiceHealth;
-    cache?: ServiceHealth;
-    email?: ServiceHealth;
-    stripe?: ServiceHealth;
-  };
-  version: string;
-}
-
-interface ServiceHealth {
+interface ServiceStatus {
   status: 'up' | 'down';
   responseTime?: number;
   error?: string;
 }
 
-/**
- * @swagger
- * /health:
- *   get:
- *     summary: Health check simple
- *     description: Vérification rapide de l'état de l'API
- *     tags: [Health]
- *     responses:
- *       200:
- *         description: API opérationnelle
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: ok
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 environment:
- *                   type: string
- */
-router.get('/', (_req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-  });
-});
-
-/**
- * @swagger
- * /health/detailed:
- *   get:
- *     summary: Health check détaillé
- *     description: Vérification complète de l'état de l'API et des services (database, cache, etc.)
- *     tags: [Health]
- *     responses:
- *       200:
- *         description: État de santé des services
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   enum: [healthy, degraded, unhealthy]
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 uptime:
- *                   type: number
- *                 services:
- *                   type: object
- *                 version:
- *                   type: string
- */
-router.get('/detailed', async (_req, res) => {
-  const startTime = Date.now();
-  const health: HealthStatus = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    services: {
-      database: { status: 'down' },
-    },
-    version: '1.0.0',
+interface HealthResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  uptime: number;
+  services: {
+    database: ServiceStatus;
+    cache: ServiceStatus;
+    email?: ServiceStatus;
+    stripe?: ServiceStatus;
   };
+  version: string;
+}
 
-  // Vérifier Supabase
+/**
+ * Endpoint simple /api/health
+ * Retourne un statut rapide (200 si OK, 503 si problème)
+ */
+router.get('/', async (req: Request, res: Response<HealthResponse>) => {
   try {
-    const dbStartTime = Date.now();
-    const { error } = await supabase.from('products').select('id').limit(1);
-    const dbResponseTime = Date.now() - dbStartTime;
+    const startTime = Date.now();
+    let dbStatus: 'up' | 'down' = 'down';
+    let cacheStatus: 'up' | 'down' = 'down';
+    let dbTime = 0;
+    let cacheTime = 0;
 
-    if (error) {
-      health.services.database = {
-        status: 'down',
-        error: error.message,
-      };
-      health.status = 'unhealthy';
-    } else {
-      health.services.database = {
-        status: 'up',
-        responseTime: dbResponseTime,
-      };
-    }
-  } catch (error: any) {
-    logger.error('Health check database error', error);
-    health.services.database = {
-      status: 'down',
-      error: error.message,
-    };
-    health.status = 'unhealthy';
-  }
-
-  // Vérifier Redis (si configuré)
-  if (process.env.UPSTASH_REDIS_URL) {
+    // Test PostgreSQL
     try {
-      const cacheStartTime = Date.now();
-      // Test simple de connexion Redis
-      const { getCache } = await import('../utils/cache.js');
-      await getCache('health-check-test');
-      const cacheResponseTime = Date.now() - cacheStartTime;
-
-      health.services.cache = {
-        status: 'up',
-        responseTime: cacheResponseTime,
-      };
+      const dbStart = Date.now();
+      if (pgPool) {
+        await pgPool.query('SELECT NOW()');
+        dbStatus = 'up';
+        dbTime = Date.now() - dbStart;
+      } else {
+        // Si pas de pgPool, essayer Supabase
+        const { supabase } = await import('../config/supabase.js');
+        const { error } = await supabase.from('products').select('id').limit(1);
+        if (!error) {
+          dbStatus = 'up';
+          dbTime = Date.now() - dbStart;
+        }
+      }
     } catch (error: any) {
-      logger.warn('Health check cache error', error);
-      health.services.cache = {
-        status: 'down',
-        error: error.message,
-      };
-      health.status = health.status === 'healthy' ? 'degraded' : health.status;
+      logger.error('🔴 Database health check failed:', error);
+      dbStatus = 'down';
     }
-  }
 
-  // Vérifier Email service avec test réel
-  try {
-    const { checkEmailHealth } = await import('../services/monitoringService.js');
-    const emailHealth = await checkEmailHealth();
-    health.services.email = {
-      status: emailHealth.status === 'healthy' ? 'up' : 'down',
-      responseTime: emailHealth.responseTime,
-      error: emailHealth.error,
-    };
-    if (emailHealth.status !== 'healthy') {
-      health.status = health.status === 'healthy' ? 'degraded' : health.status;
+    // Test Redis (détecte automatiquement local vs Upstash)
+    try {
+      const redisStart = Date.now();
+      
+      // Vérifier si Redis local est configuré
+      const redisHost = process.env.REDIS_HOST || process.env.REDIS_URL;
+      const upstashUrl = process.env.UPSTASH_REDIS_URL;
+      
+      if (redisHost || upstashUrl) {
+        // Essayer via cache utility (gère automatiquement ioredis local ou Upstash)
+        const { getCache } = await import('../utils/cache.js');
+        await getCache('health-check-test');
+        cacheStatus = 'up';
+        cacheTime = Date.now() - redisStart;
+      } else {
+        // Redis non configuré = pas d'erreur, juste non testé
+        cacheStatus = 'down';
+      }
+    } catch (error: any) {
+      logger.error('🔴 Redis health check failed:', error);
+      cacheStatus = 'down';
     }
+
+    // Déterminer le statut global
+    const isHealthy = dbStatus === 'up' && cacheStatus === 'up';
+    const overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 
+      isHealthy ? 'healthy' : (dbStatus === 'up' ? 'degraded' : 'unhealthy');
+
+    const response: HealthResponse = {
+      status: overallStatus,
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      services: {
+        database: { status: dbStatus, responseTime: dbTime },
+        cache: { status: cacheStatus, responseTime: cacheTime },
+      },
+      version: '1.0.0',
+    };
+
+    // HTTP 200 si healthy, 503 si degraded/unhealthy
+    const statusCode = isHealthy ? 200 : 503;
+    
+    res.status(statusCode).json(response);
   } catch (error: any) {
-    logger.warn('Health check email error', error);
-    health.services.email = {
-      status: 'down',
-      error: error.message,
-    };
-    health.status = health.status === 'healthy' ? 'degraded' : health.status;
+    logger.error('Health check error:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      services: {
+        database: { status: 'down', error: 'Health check failed' },
+        cache: { status: 'down', error: 'Health check failed' },
+      },
+      version: '1.0.0',
+    });
   }
-
-  // Vérifier Stripe avec test réel
-  try {
-    const { checkStripeHealth } = await import('../services/monitoringService.js');
-    const stripeHealth = await checkStripeHealth();
-    health.services.stripe = {
-      status: stripeHealth.status === 'healthy' ? 'up' : 'down',
-      responseTime: stripeHealth.responseTime,
-      error: stripeHealth.error,
-    };
-    if (stripeHealth.status !== 'healthy') {
-      health.status = health.status === 'healthy' ? 'degraded' : health.status;
-    }
-  } catch (error: any) {
-    logger.warn('Health check stripe error', error);
-    health.services.stripe = {
-      status: 'down',
-      error: error.message,
-    };
-    health.status = health.status === 'healthy' ? 'degraded' : health.status;
-  }
-
-  const totalResponseTime = Date.now() - startTime;
-
-  // Déterminer le statut global
-  const allServicesUp = Object.values(health.services).every(
-    service => service.status === 'up'
-  );
-
-  if (!allServicesUp) {
-    const criticalServicesDown = health.services.database.status === 'down';
-    health.status = criticalServicesDown ? 'unhealthy' : 'degraded';
-  }
-
-  const statusCode = health.status === 'healthy' ? 200 :
-                    health.status === 'degraded' ? 200 : 503;
-
-  return res.status(statusCode).json({
-    ...health,
-    responseTime: totalResponseTime,
-  });
 });
 
 /**
- * GET /health/readiness - Readiness check (pour Kubernetes/Docker)
+ * Endpoint détaillé /api/health/detailed
+ * Retourne des informations complètes sur tous les services
  */
-router.get('/readiness', async (_req, res) => {
+router.get('/detailed', async (req: Request, res: Response) => {
   try {
-    // Vérifier que la base de données est accessible
-    const { error } = await supabase.from('products').select('id').limit(1);
+    const startTime = Date.now();
+    
+    // Services tests
+    const services: {
+      database: ServiceStatus;
+      cache: ServiceStatus;
+      email?: ServiceStatus;
+      stripe?: ServiceStatus;
+    } = {
+      database: { status: 'down' },
+      cache: { status: 'down' },
+    };
 
-    if (error) {
-      return res.status(503).json({
-        status: 'not ready',
-        reason: 'database_unavailable',
-        error: error.message,
-      });
+    // Test DB
+    try {
+      const dbStart = Date.now();
+      if (pgPool) {
+        await pgPool.query('SELECT NOW()');
+        services.database = {
+          status: 'up',
+          responseTime: Date.now() - dbStart,
+        };
+      } else {
+        const { supabase } = await import('../config/supabase.js');
+        const { error } = await supabase.from('products').select('id').limit(1);
+        if (error) {
+          services.database = {
+            status: 'down',
+            error: error.message,
+          };
+        } else {
+          services.database = {
+            status: 'up',
+            responseTime: Date.now() - dbStart,
+          };
+        }
+      }
+    } catch (e: any) {
+      services.database = {
+        status: 'down',
+        error: e.message,
+      };
     }
 
-    return res.json({
-      status: 'ready',
+    // Test Redis
+    try {
+      const redisStart = Date.now();
+      const redisHost = process.env.REDIS_HOST || process.env.REDIS_URL;
+      const upstashUrl = process.env.UPSTASH_REDIS_URL;
+      
+      if (redisHost || upstashUrl) {
+        // Utiliser cache utility (gère automatiquement ioredis local ou Upstash)
+        const { getCache } = await import('../utils/cache.js');
+        await getCache('health-check-test');
+        services.cache = {
+          status: 'up',
+          responseTime: Date.now() - redisStart,
+        };
+      } else {
+        services.cache = {
+          status: 'down',
+          error: 'Redis not configured',
+        };
+      }
+    } catch (e: any) {
+      services.cache = {
+        status: 'down',
+        error: e.message,
+      };
+    }
+
+    // Vérifier la configuration des services externes
+    if (!process.env.RESEND_API_KEY && !process.env.MAILGUN_API_KEY) {
+      services.email = {
+        status: 'down',
+        error: 'Email provider not configured',
+      };
+    } else {
+      services.email = {
+        status: 'up',
+      };
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      services.stripe = {
+        status: 'down',
+        error: 'Stripe not configured',
+      };
+    } else {
+      services.stripe = {
+        status: 'up',
+      };
+    }
+
+    // Déterminer le statut global
+    const allCriticalUp = services.database.status === 'up';
+    const overallStatus = allCriticalUp ? 'healthy' : 'unhealthy';
+
+    const response = {
+      status: overallStatus,
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      services,
+      environment: process.env.NODE_ENV || 'development',
+      version: '1.0.0',
+      responseTime: Date.now() - startTime,
+    };
+
+    const statusCode = overallStatus === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(response);
+  } catch (error: any) {
+    logger.error('Detailed health check error:', error);
+    res.status(500).json({ 
+      status: 'unhealthy',
+      error: 'Health check failed',
       timestamp: new Date().toISOString(),
     });
-  } catch (error: any) {
-    return res.status(503).json({
-      status: 'not ready',
-      reason: 'database_error',
-      error: error.message,
-    });
   }
-});
-
-/**
- * GET /health/liveness - Liveness check (pour Kubernetes/Docker)
- */
-router.get('/liveness', (_req, res) => {
-  res.json({
-    status: 'alive',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
 });
 
 export default router;

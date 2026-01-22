@@ -62,7 +62,9 @@ function setCachedPrice(productId: string, price: number): void {
 
 async function computeServerTotal(
   items: CreateOrderInput['items'],
-  promoCode?: string | null
+  promoCode?: string | null,
+  userId?: string | null,
+  productCategories?: string[]
 ): Promise<{
   subtotal: number;
   shipping: number;
@@ -70,6 +72,7 @@ async function computeServerTotal(
   total: number;
   serverItems: Array<{ productId: string; quantity: number; unitPrice: number }>;
   appliedPromoCode?: string;
+  appliedCouponId?: string;
 }> {
   const serverItems: Array<{ productId: string; quantity: number; unitPrice: number }> = [];
 
@@ -102,10 +105,31 @@ async function computeServerTotal(
 
   let discount = 0;
   let appliedPromoCode: string | undefined;
+  let appliedCouponId: string | undefined;
 
-  // Promo côté serveur (source de vérité)
+  // Essayer d'abord le nouveau système de coupons
   const code = promoCode?.trim() ? promoCode.trim().toUpperCase() : null;
-  if (code) {
+  if (code && userId) {
+    try {
+      const { validateCoupon } = await import('./couponsService.js');
+      const couponResult = await validateCoupon(code, userId, preDiscountTotal, productCategories);
+      
+      if (couponResult.valid && couponResult.discount_amount) {
+        discount = couponResult.discount_amount;
+        appliedPromoCode = code;
+        appliedCouponId = couponResult.coupon!.id;
+      }
+    } catch (error) {
+      // Si le système de coupons échoue, essayer l'ancien système promo
+      logger.warn('Coupon validation failed, falling back to promo code', {
+        code,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Fallback: ancien système promo si coupon non valide
+  if (discount === 0 && code) {
     const promo = await validatePromoCode(code, preDiscountTotal);
     if (promo.valid) {
       discount = promo.discount;
@@ -119,7 +143,7 @@ async function computeServerTotal(
 
   const total = Math.max(0, preDiscountTotal - discount);
 
-  return { subtotal, shipping, discount, total, serverItems, appliedPromoCode };
+  return { subtotal, shipping, discount, total, serverItems, appliedPromoCode, appliedCouponId };
 }
 
 /**
@@ -300,8 +324,36 @@ export async function createOrder(
 ): Promise<OrderResponse> {
   const LEGAL_CONSENT_VERSION = 'v1';
 
+  // Récupérer les catégories des produits pour validation coupon
+  const productCategories: string[] = [];
+  try {
+    const productIds = data.items.map((item) => item.productId);
+    const { data: products } = await supabase
+      .from('products')
+      .select('category')
+      .in('id', productIds);
+    
+    if (products) {
+      products.forEach((p: any) => {
+        if (p.category && !productCategories.includes(p.category)) {
+          productCategories.push(p.category);
+        }
+      });
+    }
+  } catch (error) {
+    // Non-bloquant
+    logger.warn('Failed to fetch product categories for coupon validation', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   // 0. Calculer le total côté serveur (ignore data.total et item.price)
-  const computed = await computeServerTotal(data.items, data.shipping?.promoCode || null);
+  const computed = await computeServerTotal(
+    data.items,
+    data.shipping?.promoCode || null,
+    userId || null,
+    productCategories.length > 0 ? productCategories : undefined
+  );
 
   // 0.5. Valider anti-fraude (quantités, totaux)
   validateAntiFraud(data.items, computed.total);
@@ -447,7 +499,74 @@ export async function createOrder(
     }
   }
 
-  // 6. Retourner la réponse
+  // 5.8. Appliquer le coupon si utilisé (enregistrer l'utilisation)
+  if (computed.appliedCouponId && userId) {
+    try {
+      const { applyCouponToOrder } = await import('./couponsService.js');
+      await applyCouponToOrder(computed.appliedCouponId, userId, orderId, computed.discount);
+    } catch (error: any) {
+      // Non-bloquant: le coupon est déjà appliqué au total
+      logger.warn('Failed to record coupon usage (non-blocking)', {
+        couponId: computed.appliedCouponId,
+        orderId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // 6. Envoyer l'email de confirmation (non-bloquant)
+  try {
+    const { sendOrderConfirmationEmail } = await import('./emailService.js');
+    
+    // Récupérer les détails des produits pour l'email
+    const { data: orderItemsWithProducts } = await supabase
+      .from('order_items')
+      .select('quantity, price, product:products(title)')
+      .eq('order_id', orderId);
+
+    const emailItems = (orderItemsWithProducts || []).map((item: any) => ({
+      title: item.product?.title || 'Produit',
+      quantity: item.quantity,
+      unitPrice: item.price,
+    }));
+
+    const shippingEmail = data.shipping.email || order.shipping_email;
+    if (shippingEmail) {
+      await sendOrderConfirmationEmail({
+        to: shippingEmail,
+        orderNumber: order.order_number,
+        total: order.total,
+        createdAt: order.created_at,
+        shippingName: `${data.shipping.firstName} ${data.shipping.lastName}`,
+        shippingAddressLine: `${data.shipping.address}, ${data.shipping.postalCode} ${data.shipping.city}`,
+        items: emailItems,
+        userId: userId || undefined,
+        subtotal: computed.subtotal,
+        shipping: computed.shipping,
+        discount: computed.discount,
+        promoCode: computed.appliedPromoCode || null,
+        shippingAddress: {
+          firstName: data.shipping.firstName,
+          lastName: data.shipping.lastName,
+          address: data.shipping.address,
+          city: data.shipping.city,
+          postalCode: data.shipping.postalCode,
+          country: data.shipping.country,
+        },
+        includePDF: true, // Générer le PDF de facture
+      });
+    }
+  } catch (emailError: any) {
+    // Non-bloquant: on log mais on ne fait pas échouer la commande
+    logger.warn('Erreur envoi email confirmation (non-blocking)', {
+      orderId,
+      orderNumber,
+      email: data.shipping.email,
+      error: emailError instanceof Error ? emailError.message : String(emailError),
+    });
+  }
+
+  // 7. Retourner la réponse
   return {
     id: order.id,
     orderNumber: order.order_number,

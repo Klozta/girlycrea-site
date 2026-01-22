@@ -98,3 +98,4 @@ echo "   3. Tester l'API: curl http://localhost:3001/api/products"
 echo "   4. Une fois tout OK localement, migrer vers le VPS"
 
 
+

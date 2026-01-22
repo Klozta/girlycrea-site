@@ -6,22 +6,40 @@ import { Filter, Grid, List } from 'lucide-react';
 import { api } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
 
+export const dynamic = 'force-dynamic';
+
 export default function ProductsPage() {
-  const searchParams = useSearchParams();
+  const [searchParams, setSearchParamsState] = useState<URLSearchParams | null>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filters, setFilters] = useState({
-    category: searchParams.get('category') || '',
+    category: '',
     minPrice: '',
     maxPrice: '',
-    q: searchParams.get('q') || '',
+    q: '',
   });
 
+  // Charger searchParams côté client uniquement
   useEffect(() => {
-    loadProducts();
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setSearchParamsState(params);
+      setFilters({
+        category: params.get('category') || '',
+        minPrice: '',
+        maxPrice: '',
+        q: params.get('q') || '',
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (searchParams !== null) {
+      loadProducts();
+    }
   }, [page, filters, searchParams]);
 
   const loadProducts = async () => {
@@ -60,15 +78,12 @@ export default function ProductsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Sidebar Filters */}
         <aside className="md:w-64 flex-shrink-0">
           <div className="card p-6 sticky top-24">
             <h2 className="font-display text-xl font-semibold mb-6 flex items-center gap-2">
               <Filter className="w-5 h-5" />
               Filtres
             </h2>
-
-            {/* Search */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">Recherche</label>
               <input
@@ -79,8 +94,6 @@ export default function ProductsPage() {
                 className="input"
               />
             </div>
-
-            {/* Category */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">Catégorie</label>
               <select
@@ -93,14 +106,10 @@ export default function ProductsPage() {
               >
                 <option value="">Toutes les catégories</option>
                 {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
+                  <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
             </div>
-
-            {/* Price Range */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">Prix</label>
               <div className="flex gap-2">
@@ -120,7 +129,6 @@ export default function ProductsPage() {
                 />
               </div>
             </div>
-
             <button
               onClick={() => {
                 setFilters({ category: '', minPrice: '', maxPrice: '', q: '' });
@@ -132,10 +140,7 @@ export default function ProductsPage() {
             </button>
           </div>
         </aside>
-
-        {/* Products Grid */}
         <div className="flex-1">
-          {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-3xl font-display font-bold mb-2">
@@ -160,8 +165,6 @@ export default function ProductsPage() {
               </button>
             </div>
           </div>
-
-          {/* Products */}
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
@@ -176,19 +179,11 @@ export default function ProductsPage() {
             </div>
           ) : products.length > 0 ? (
             <>
-              <div
-                className={
-                  viewMode === 'grid'
-                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'
-                    : 'space-y-4'
-                }
-              >
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>
-
-              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 mt-12">
                   <button
@@ -198,9 +193,7 @@ export default function ProductsPage() {
                   >
                     Précédent
                   </button>
-                  <span className="px-4 py-2">
-                    Page {page} sur {totalPages}
-                  </span>
+                  <span className="px-4 py-2">Page {page} sur {totalPages}</span>
                   <button
                     onClick={() => setPage(Math.min(totalPages, page + 1))}
                     disabled={page === totalPages}
@@ -222,4 +215,3 @@ export default function ProductsPage() {
     </div>
   );
 }
-

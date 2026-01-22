@@ -95,9 +95,15 @@ export function chunk<T>(array: T[], size: number): T[][] {
  * Flatten un tableau de tableaux
  */
 export function flatten<T>(array: (T | T[])[]): T[] {
-  return array.reduce((acc: T[], item) => {
-    return acc.concat(Array.isArray(item) ? flatten(item) : [item]);
-  }, [] as T[]);
+  const result: T[] = [];
+  for (const item of array) {
+    if (Array.isArray(item)) {
+      result.push(...flatten<T>(item));
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
 }
 
 

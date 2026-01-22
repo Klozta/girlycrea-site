@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 import pg from 'pg';
+
+// Charger les variables d'environnement
+dotenv.config();
 
 // Support pour PostgreSQL direct (VPS) ou Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -86,11 +90,28 @@ if (isPlaceholder(supabaseUrl) || isPlaceholder(supabaseKey)) {
       },
     };
   } else {
-    throw new Error('SUPABASE_URL and SUPABASE_KEY must be set in .env');
+    // Si DATABASE_URL est fourni (PostgreSQL direct), on peut utiliser un placeholder
+    if (databaseUrl && databaseUrl.startsWith('postgresql://')) {
+      console.warn('⚠️  Mode PostgreSQL direct détecté - Utilisation de Supabase mock');
+      // Utiliser le mock créé plus haut
+    } else {
+      throw new Error('SUPABASE_URL and SUPABASE_KEY must be set in .env');
+    }
   }
 } else {
-  // Configuration normale
-  supabase = createClient(supabaseUrl!, supabaseKey!);
+  // Configuration normale - vérifier si c'est un placeholder
+  if (isPlaceholder(supabaseUrl) || isPlaceholder(supabaseKey)) {
+    // Si DATABASE_URL est fourni, utiliser le mock
+    if (databaseUrl && databaseUrl.startsWith('postgresql://')) {
+      console.warn('⚠️  Mode PostgreSQL direct - Utilisation de Supabase mock');
+      // Le mock est déjà créé dans le bloc if ci-dessus
+    } else {
+      throw new Error('SUPABASE_URL and SUPABASE_KEY must be set in .env');
+    }
+  } else {
+    // Configuration normale
+    supabase = createClient(supabaseUrl!, supabaseKey!);
+  }
 }
 
 export { supabase };

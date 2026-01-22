@@ -42,7 +42,7 @@ export function handleServiceError(
 
     // Erreurs réseau/externes
     if (error.message.includes('ECONNREFUSED') || error.message.includes('ETIMEDOUT')) {
-      logger.error(`Connection error in ${context}`, { error: error.message });
+      logger.error(`Connection error in ${context}`, error, { message: error.message });
       return createError.externalService('database', 'Connexion à la base de données échouée');
     }
 
@@ -52,7 +52,7 @@ export function handleServiceError(
   }
 
   // Erreur inconnue
-  logger.error(`Unknown error type in ${context}`, { error });
+  logger.error(`Unknown error type in ${context}`, error instanceof Error ? error : new Error(String(error)));
   return createError.internal(defaultMessage || `Erreur inconnue dans ${context}`);
 }
 
@@ -100,8 +100,9 @@ export function handleSupabaseError(error: any, context: string): AppError {
       case '42P01': // Undefined table
         return createError.database('Table non trouvée');
       default:
-        logger.error(`Supabase error in ${context}`, { code: error.code, message: error.message });
-        return createError.database(error.message || 'Erreur base de données');
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        logger.error(`Supabase error in ${context}`, errorObj, { code: (error as any)?.code, message: errorObj.message });
+        return createError.database(errorObj.message || 'Erreur base de données');
     }
   }
 
@@ -124,10 +125,10 @@ export function handleExternalServiceError(
     return error;
   }
 
-  const message = error instanceof Error ? error.message : String(error);
-  logger.error(`External service error in ${context}`, { service: serviceName, error: message });
+  const errorObj = error instanceof Error ? error : new Error(String(error));
+  logger.error(`External service error in ${context}`, errorObj, { service: serviceName });
   
-  return createError.externalService(serviceName, message);
+  return createError.externalService(serviceName, errorObj.message);
 }
 
 /**

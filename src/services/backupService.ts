@@ -47,10 +47,24 @@ export class BackupService {
       ...config,
     };
 
-    // Créer le dossier de backup local si nécessaire
+    // Créer le dossier de backup local si nécessaire (avec gestion d'erreur)
     if (this.config.storageType === 'local' && this.config.localPath) {
-      if (!existsSync(this.config.localPath)) {
-        mkdirSync(this.config.localPath, { recursive: true });
+      try {
+        if (!existsSync(this.config.localPath)) {
+          mkdirSync(this.config.localPath, { recursive: true });
+        }
+      } catch (error: any) {
+        // Ignorer les erreurs de permissions (backups optionnel en Docker)
+        if (error.code === 'EACCES' || error.code === 'EPERM') {
+          logger.warn('Cannot create backups directory, backups will be disabled', { 
+            path: this.config.localPath,
+            error: error.message 
+          });
+          // Désactiver les backups locaux si pas de permissions
+          this.config.storageType = 'supabase-storage';
+        } else {
+          throw error;
+        }
       }
     }
   }

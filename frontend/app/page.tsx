@@ -3,19 +3,31 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Sparkles, Heart, Star } from 'lucide-react';
+import { ArrowRight, Sparkles, Heart, Star, GraduationCap } from 'lucide-react';
 import { api } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
+import CourseCard from '@/components/CourseCard';
 import { useStore } from '@/lib/store';
 
 export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
+  const [featuredCourses, setFeaturedCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [coursesLoading, setCoursesLoading] = useState(true);
   const { checkAuth } = useStore();
 
   useEffect(() => {
-    checkAuth();
-    loadFeaturedProducts();
+    // Wrapper pour éviter les exceptions non gérées
+    const init = async () => {
+      try {
+        await checkAuth();
+      } catch (error) {
+        console.warn('Error in checkAuth:', error);
+      }
+      loadFeaturedProducts();
+      loadFeaturedCourses();
+    };
+    init();
   }, []);
 
   const loadFeaturedProducts = async () => {
@@ -30,6 +42,22 @@ export default function Home() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFeaturedCourses = async () => {
+    try {
+      const data = await api.getCourses({ limit: 4, sort: 'rating_desc' });
+      setFeaturedCourses(data.courses || []);
+    } catch (error: any) {
+      console.error('Error loading courses:', error);
+      // Si l'endpoint n'existe pas (404), on ignore silencieusement
+      if (error.response?.status === 404 || error.isNetworkError) {
+        console.warn('Endpoint /api/courses non disponible, masquage de la section cours');
+        setFeaturedCourses([]);
+      }
+    } finally {
+      setCoursesLoading(false);
     }
   };
 
@@ -77,6 +105,9 @@ export default function Home() {
               <Link href="/products" className="btn bg-white text-primary-600 hover:bg-gray-100">
                 Découvrir la boutique
                 <ArrowRight className="ml-2 w-5 h-5" />
+              </Link>
+              <Link href="/courses" className="btn btn-outline border-white text-white hover:bg-white/10">
+                Cours de crochet
               </Link>
               <Link href="/products?category=Bijoux" className="btn btn-outline border-white text-white hover:bg-white/10">
                 Voir les bijoux
@@ -149,6 +180,49 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Featured Courses */}
+      {featuredCourses.length > 0 && (
+        <section className="py-16 bg-gray-50">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center justify-between mb-12">
+              <div className="flex items-center gap-3">
+                <GraduationCap className="w-8 h-8 text-primary-600" />
+                <h2 className="text-3xl font-display font-bold">
+                  Cours de Crochet
+                </h2>
+              </div>
+              <Link
+                href="/courses"
+                className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-2"
+              >
+                Voir tous les cours
+                <ArrowRight className="w-5 h-5" />
+              </Link>
+            </div>
+
+            {coursesLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="card animate-pulse">
+                    <div className="aspect-video bg-gray-200" />
+                    <div className="p-4 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                      <div className="h-4 bg-gray-200 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {featuredCourses.slice(0, 4).map((course) => (
+                  <CourseCard key={course.id} course={course} />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Featured Products */}
       <section className="py-16 bg-white">

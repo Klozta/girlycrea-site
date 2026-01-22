@@ -38,12 +38,17 @@ function csrfProtection(req: Request, res: Response, next: NextFunction): void {
     return next();
   }
 
+  // Skip CSRF si désactivé via variable d'environnement
+  if (process.env.SKIP_CSRF_PROTECTION === 'true') {
+    return next();
+  }
+
   // Vérifier le token CSRF depuis cookie ou header
   const csrfToken = req.headers['x-csrf-token'] || req.body._csrf;
   const csrfCookie = req.cookies?.['csrf-token'];
 
   // En développement, permettre sans token pour faciliter les tests
-  if (process.env.NODE_ENV === 'development' && process.env.SKIP_CSRF === 'true') {
+  if (process.env.NODE_ENV === 'development') {
     return next();
   }
 

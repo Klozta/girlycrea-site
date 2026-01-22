@@ -2,7 +2,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { getSecret } from '../config/secrets.js';
-import { supabase } from '../config/supabase.js';
+import { pgPool, supabase } from '../config/supabase.js';
 import {
     JwtPayload,
     RefreshTokenRecord,
@@ -11,6 +11,9 @@ import {
 } from '../types/auth.types.js';
 import { createError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+
+// Utiliser PostgreSQL directement si disponible, sinon Supabase
+const useDirectPg = pgPool !== null;
 
 /**
  * Hash password with bcrypt (10 rounds)
@@ -79,13 +82,35 @@ export function verifyRefreshToken(token: string): { userId: string } | null {
 }
 
 /**
- * Create new user in Supabase
+ * Create new user in database
  */
 export async function createUser(
   email: string,
   passwordHash: string,
   name: string
 ): Promise<{ id: string; email: string; name: string }> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      const result = await pgPool.query(
+        'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name',
+        [email, passwordHash, name]
+      );
+      if (result.rows.length === 0) {
+        throw createError.database('Échec de la création de l\'utilisateur');
+      }
+      logger.info('User created successfully (PG)', { userId: result.rows[0].id, email });
+      return result.rows[0];
+    } catch (error: any) {
+      logger.error('Failed to create user (PG)', error, { email });
+      if (error.code === '23505') {
+        throw createError.conflict('Cet email est déjà utilisé');
+      }
+      throw createError.database(`Erreur lors de la création de l'utilisateur: ${error.message}`, error);
+    }
+  }
+  
+  // Fallback Supabase
   const { data, error } = await supabase
     .from('users')
     .insert({ email, password_hash: passwordHash, name })
@@ -113,6 +138,22 @@ export async function createUser(
  * Find user by email (with password)
  */
 export async function findUserByEmail(email: string): Promise<UserWithPassword | null> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      const result = await pgPool.query(
+        'SELECT id, email, name, password_hash FROM users WHERE email = $1',
+        [email]
+      );
+      if (result.rows.length === 0) return null;
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error finding user by email (PG)', error as Error, { email });
+      return null;
+    }
+  }
+  
+  // Fallback Supabase
   const { data, error } = await supabase
     .from('users')
     .select('id, email, name, password_hash')
@@ -127,6 +168,22 @@ export async function findUserByEmail(email: string): Promise<UserWithPassword |
  * Find user by ID (without password)
  */
 export async function findUserById(id: string): Promise<User | null> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      const result = await pgPool.query(
+        'SELECT id, email, name, created_at FROM users WHERE id = $1',
+        [id]
+      );
+      if (result.rows.length === 0) return null;
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error finding user by ID (PG)', error as Error, { id });
+      return null;
+    }
+  }
+  
+  // Fallback Supabase
   const { data, error } = await supabase
     .from('users')
     .select('id, email, name, created_at')
@@ -145,6 +202,20 @@ export async function saveRefreshToken(
   token: string,
   expiresAt: Date
 ): Promise<void> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      await pgPool.query(
+        'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+        [userId, token, expiresAt.toISOString()]
+      );
+      return;
+    } catch (error: any) {
+      throw new Error(`Failed to save refresh token (PG): ${error.message}`);
+    }
+  }
+  
+  // Fallback Supabase
   const { error } = await supabase
     .from('refresh_tokens')
     .insert({
@@ -160,6 +231,22 @@ export async function saveRefreshToken(
  * Find refresh token in database
  */
 export async function findRefreshToken(token: string): Promise<RefreshTokenRecord | null> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      const result = await pgPool.query(
+        'SELECT * FROM refresh_tokens WHERE token = $1',
+        [token]
+      );
+      if (result.rows.length === 0) return null;
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error finding refresh token (PG)', error as Error);
+      return null;
+    }
+  }
+  
+  // Fallback Supabase
   const { data, error } = await supabase
     .from('refresh_tokens')
     .select('*')
@@ -174,6 +261,20 @@ export async function findRefreshToken(token: string): Promise<RefreshTokenRecor
  * Revoke refresh token (soft delete)
  */
 export async function revokeRefreshToken(token: string): Promise<void> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      await pgPool.query(
+        'UPDATE refresh_tokens SET is_revoked = true WHERE token = $1',
+        [token]
+      );
+      return;
+    } catch (error: any) {
+      throw new Error(`Failed to revoke token (PG): ${error.message}`);
+    }
+  }
+  
+  // Fallback Supabase
   const { error } = await supabase
     .from('refresh_tokens')
     .update({ is_revoked: true })
@@ -186,6 +287,17 @@ export async function revokeRefreshToken(token: string): Promise<void> {
  * Delete refresh token (hard delete)
  */
 export async function deleteRefreshToken(token: string): Promise<void> {
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      await pgPool.query('DELETE FROM refresh_tokens WHERE token = $1', [token]);
+      return;
+    } catch (error: any) {
+      throw new Error(`Failed to delete token (PG): ${error.message}`);
+    }
+  }
+  
+  // Fallback Supabase
   const { error } = await supabase
     .from('refresh_tokens')
     .delete()

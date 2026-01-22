@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useStore } from '@/lib/store';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
+import ProductReviews from '@/components/ProductReviews';
 
 export default function ProductPage() {
   const params = useParams();
@@ -229,26 +230,7 @@ export default function ProductPage() {
 
       {/* Reviews Section */}
       <div className="mt-16 border-t pt-12">
-        <h2 className="text-2xl font-display font-bold mb-8">Avis clients</h2>
-        <div className="space-y-6">
-          {/* Placeholder reviews */}
-          <div className="card p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="font-semibold">Marie D.</p>
-                <div className="flex items-center gap-1 mt-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-accent-400 text-accent-400" />
-                  ))}
-                </div>
-              </div>
-              <span className="text-sm text-gray-500">Il y a 2 semaines</span>
-            </div>
-            <p className="text-gray-700">
-              Superbe produit, qualité au rendez-vous ! Je recommande vivement.
-            </p>
-          </div>
-        </div>
+        <ProductReviews productId={productId} />
       </div>
     </div>
   );

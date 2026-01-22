@@ -198,9 +198,8 @@ async function sendEmailSMTP(options: EmailOptions): Promise<boolean> {
 
     // Import dynamique de nodemailer
     const nodemailer = await import('nodemailer');
-    const { default: createTransport } = nodemailer;
 
-    const transporter = createTransport({
+    const transporter = nodemailer.default.createTransport({
       host: smtpHost,
       port: smtpPort,
       secure: smtpSecure, // true pour 465, false pour autres ports
@@ -675,5 +674,153 @@ export async function sendOrderConfirmationEmail(params: {
     subject: `✅ Confirmation — Commande ${params.orderNumber}`,
     html,
     attachments: attachments.length > 0 ? attachments : undefined,
+  });
+}
+
+/**
+ * Génère le template HTML pour l'email de bienvenue
+ */
+export function generateWelcomeEmailHTML(params: {
+  name: string;
+  discountCode?: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px;">
+    <h1 style="margin: 0 0 12px; color: #db2777;">Bienvenue sur GirlyCrea ! 🎉</h1>
+    <p style="margin: 0 0 16px; color: #374151;">
+      Bonjour ${params.name},
+    </p>
+    <p style="margin: 0 0 16px; color: #374151;">
+      Nous sommes ravis de vous accueillir dans la communauté GirlyCrea ! 
+      Découvrez notre sélection de bijoux, accessoires mode, produits de beauté et cours de crochet.
+    </p>
+    ${params.discountCode ? `
+      <div style="background-color: #fef3c7; border: 2px solid #f59e0b; border-radius: 10px; padding: 16px; margin: 16px 0; text-align: center;">
+        <p style="margin: 0 0 8px; font-weight: 700; color: #92400e;">Code promo de bienvenue</p>
+        <p style="margin: 0; font-size: 24px; font-weight: 700; color: #db2777; letter-spacing: 2px;">${params.discountCode}</p>
+        <p style="margin: 8px 0 0; color: #78350f; font-size: 14px;">-10% sur votre première commande</p>
+      </div>
+    ` : ''}
+    <div style="margin: 24px 0;">
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/products" 
+         style="display: inline-block; background-color: #db2777; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+        Découvrir la boutique
+      </a>
+    </div>
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+    <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+      © ${new Date().getFullYear()} GirlyCrea — Tous droits réservés
+    </p>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+/**
+ * Envoie un email de bienvenue
+ */
+export async function sendWelcomeEmail(params: {
+  to: string;
+  name: string;
+  userId?: string;
+  discountCode?: string;
+}): Promise<boolean> {
+  if (params.userId) {
+    const canSend = await canSendEmail(params.userId, 'newsletter');
+    if (!canSend) {
+      logger.info('Email bienvenue non envoyé (préférences utilisateur)', { userId: params.userId, email: params.to });
+      return false;
+    }
+  }
+
+  const html = generateWelcomeEmailHTML({
+    name: params.name,
+    discountCode: params.discountCode,
+  });
+
+  return await sendEmail({
+    to: params.to,
+    subject: '🎉 Bienvenue sur GirlyCrea !',
+    html,
+  });
+}
+
+/**
+ * Génère le template HTML pour l'email de récupération de mot de passe
+ */
+export function generatePasswordResetEmailHTML(params: {
+  name: string;
+  resetToken: string;
+  expiresIn?: string;
+}): string {
+  const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${params.resetToken}`;
+  const expiresIn = params.expiresIn || '1 heure';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px;">
+    <h1 style="margin: 0 0 12px; color: #db2777;">Réinitialisation de votre mot de passe</h1>
+    <p style="margin: 0 0 16px; color: #374151;">
+      Bonjour ${params.name},
+    </p>
+    <p style="margin: 0 0 16px; color: #374151;">
+      Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour créer un nouveau mot de passe.
+    </p>
+    <div style="margin: 24px 0; text-align: center;">
+      <a href="${resetUrl}" 
+         style="display: inline-block; background-color: #db2777; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+        Réinitialiser mon mot de passe
+      </a>
+    </div>
+    <p style="margin: 16px 0; color: #6b7280; font-size: 14px;">
+      Ce lien est valide pendant ${expiresIn}. Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
+    </p>
+    <p style="margin: 16px 0; color: #6b7280; font-size: 14px;">
+      Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :<br>
+      <span style="word-break: break-all; color: #059669;">${resetUrl}</span>
+    </p>
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+    <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+      © ${new Date().getFullYear()} GirlyCrea — Tous droits réservés
+    </p>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+/**
+ * Envoie un email de récupération de mot de passe
+ */
+export async function sendPasswordResetEmail(params: {
+  to: string;
+  name: string;
+  resetToken: string;
+  expiresIn?: string;
+}): Promise<boolean> {
+  const html = generatePasswordResetEmailHTML({
+    name: params.name,
+    resetToken: params.resetToken,
+    expiresIn: params.expiresIn,
+  });
+
+  return await sendEmail({
+    to: params.to,
+    subject: '🔐 Réinitialisation de votre mot de passe',
+    html,
   });
 }

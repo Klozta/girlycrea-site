@@ -3,6 +3,8 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import Toaster from '@/components/Toaster'
 import BackendStatus from '@/components/BackendStatus'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { Hydration } from '@/components/Hydration'
 
 export const metadata = {
   title: 'GirlyCrea - Boutique en ligne bijoux, mode, beauté',
@@ -20,11 +22,14 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className="min-h-screen bg-gray-50 flex flex-col">
-        <Header />
-        <BackendStatus />
-        <main className="flex-1">{children}</main>
-        <Footer />
-        <Toaster />
+        <ErrorBoundary>
+          <Hydration />
+          <Header />
+          <BackendStatus />
+          <main className="flex-1">{children}</main>
+          <Footer />
+          <Toaster />
+        </ErrorBoundary>
       </body>
     </html>
   )

@@ -32,8 +32,11 @@ import autoProductSmartRoutes from './routes/autoProductSmart.routes.js';
 import chatbotRoutes from './routes/chatbot.routes.js';
 import complianceRoutes from './routes/compliance.routes.js';
 import contactRoutes from './routes/contact.routes.js';
+import adminStatsRoutes from './routes/adminStats.routes.js';
 import courseEnrollmentsRoutes from './routes/courseEnrollments.routes.js';
 import coursesRoutes from './routes/courses.routes.js';
+import couponsRoutes from './routes/coupons.routes.js';
+import productReviewsRoutes from './routes/productReviews.routes.js';
 import cronRoutes from './routes/cron.routes.js';
 import emailPreferencesRoutes from './routes/emailPreferences.routes.js';
 import featureFlagsRoutes from './routes/featureFlags.routes.js';
@@ -177,7 +180,8 @@ app.use(requestLoggingMiddleware);
 app.use('/api', globalRateLimiter);
 
 // Health check routes (simple + detailed)
-app.use('/health', healthRoutes);
+// Health check AVANT tout (ne nécessite pas d'auth)
+app.use('/api/health', healthRoutes);
 
 // Monitoring routes (admin only)
 app.use('/api/monitoring', monitoringRoutes);
@@ -211,6 +215,8 @@ app.get('/api', (_req, res) => {
 app.use('/api/auth', authRoutes);
 // Admin session (cookie httpOnly)
 app.use('/api/admin', adminRoutes);
+// Admin Stats (dashboard réel avec données BDD)
+app.use('/api/admin', adminStatsRoutes);
 // Historique de navigation utilisateur + Dashboard
 app.use('/api/user', viewHistoryRoutes);
 app.use('/api/user', userDashboardRoutes);
@@ -225,6 +231,10 @@ app.use('/api/products', productsRoutes);
 // Courses routes
 app.use('/api/courses', coursesRoutes);
 app.use('/api/courses/enrollments', courseEnrollmentsRoutes);
+// Coupons routes
+app.use('/api/coupons', couponsRoutes);
+// Product reviews routes
+app.use('/api', productReviewsRoutes);
 // Orders routes (J3 ✅)
 app.use('/api/orders', ordersRoutes);
 // Loyalty program

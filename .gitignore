@@ -46,3 +46,5 @@ temp/
 *.pem
 *.key
 secrets/
+JWT_SECRETS_GENERATED.txt
+.env.docker

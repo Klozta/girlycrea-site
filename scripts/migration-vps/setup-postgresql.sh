@@ -44,3 +44,4 @@ echo "DATABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME"
 echo "SUPABASE_URL=postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME"
 
 
+

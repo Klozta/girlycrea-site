@@ -1,0 +1,70 @@
+# ========================
+# BUILD STAGE - Compiler TypeScript
+# ========================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copier les fichiers de dépendances
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Installer les dépendances (y compris devDependencies pour TypeScript)
+RUN npm ci
+
+# Copier le code source
+COPY . .
+
+# Compiler TypeScript vers dist/
+RUN npm run build
+
+# ========================
+# RUNTIME STAGE - Image production minimale
+# ========================
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Installer dumb-init pour gérer les signaux SIGTERM correctement
+RUN apk add --no-cache dumb-init
+
+# Installer dépendances système pour Playwright (si nécessaire)
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    curl
+
+# Variables d'environnement pour Playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
+
+# Créer un user non-root pour la sécurité
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copier dist et package.json du build stage
+COPY --from=builder --chown=root:root /app/dist ./dist
+COPY --from=builder --chown=root:root /app/package*.json ./
+
+# Installer seulement les dépendances de production (avant de changer user)
+RUN npm ci --only=production && npm cache clean --force
+
+# Changer les permissions et passer à l'user non-root
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Health check - vérifie que le serveur répond
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
+
+# Exposer le port
+EXPOSE 3001
+
+# Démarrer l'application avec dumb-init pour graceful shutdown
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/index.js"]
+

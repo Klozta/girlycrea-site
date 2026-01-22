@@ -1,0 +1,40 @@
+# Commandes PowerShell à exécuter sur Windows (Admin)
+
+## Méthode 1 : Accès direct depuis WSL2
+
+Dans PowerShell Windows (Admin), exécutez :
+
+```powershell
+# Accéder directement au fichier WSL2
+cd \\wsl$\Ubuntu\home\ghislain\girlycrea-site
+.\port-forward.ps1
+```
+
+## Méthode 2 : Commandes manuelles (Plus simple)
+
+Dans PowerShell Windows (Admin), exécutez directement :
+
+```powershell
+$wslIP = "172.24.241.227"
+netsh interface portproxy add v4tov4 listenport=3000 listenaddress=0.0.0.0 connectport=3000 connectaddress=$wslIP
+netsh interface portproxy add v4tov4 listenport=3001 listenaddress=0.0.0.0 connectport=3001 connectaddress=$wslIP
+Write-Host "✅ Ports forwardés avec succès!"
+```
+
+## Vérification
+
+```powershell
+netsh interface portproxy show all
+```
+
+## Trouver votre IP Windows
+
+```powershell
+ipconfig | findstr IPv4
+```
+
+## URL à partager
+
+http://VOTRE_IP_WINDOWS:3000
+
+

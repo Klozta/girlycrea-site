@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  # ========================
+  # BACKEND (Node.js Express)
+  # ========================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.dev
+    container_name: girlycrea-backend-dev
+    env_file:
+      - .env  # Charger les variables depuis .env
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./src:/app/src          # Hot reload
+      - ./package.json:/app/package.json
+      - /app/node_modules               # Don't override node_modules
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL:-postgresql://admin:password@postgres:5432/girlycrea}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}  # Port interne reste 6379
+      # Secrets requis (chargés depuis .env ou valeurs par défaut)
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-min-32-chars}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-change-in-production-min-32-chars}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-dev-revalidate-secret-change-in-production-min-32-chars}
+      # Supabase (optionnel en dev)
+      SUPABASE_URL: ${SUPABASE_URL:-https://placeholder.supabase.co}
+      SUPABASE_KEY: ${SUPABASE_KEY:-placeholder-key}
+      # Services optionnels
+      STRIPE_SECRET: ${STRIPE_SECRET:-}
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - girlycrea-network
+    command: npm run dev
+    restart: unless-stopped
+
+  # ========================
+  # FRONTEND (Next.js)
+  # ========================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: girlycrea-frontend-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://backend:3001  # Utiliser le nom du service Docker
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_KEY: ${SUPABASE_KEY}
+    depends_on:
+      - backend
+    networks:
+      - girlycrea-network
+    command: npm run dev
+    restart: unless-stopped
+
+  # ========================
+  # REDIS (Cache)
+  # ========================
+  redis:
+    image: redis:7-alpine
+    container_name: girlycrea-redis-dev
+    ports:
+      - "6380:6379"  # Port externe changé pour éviter conflit
+    volumes:
+      - redis_data:/data
+    networks:
+      - girlycrea-network
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # ========================
+  # PostgreSQL (Local DB - Optionnel)
+  # ========================
+  postgres:
+    image: postgres:16-alpine
+    container_name: girlycrea-postgres-dev
+    environment:
+      POSTGRES_DB: girlycrea
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"  # Port externe changé pour éviter conflit
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - girlycrea-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  girlycrea-network:
+    driver: bridge
+

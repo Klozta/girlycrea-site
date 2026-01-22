@@ -219,6 +219,109 @@ class ApiClient {
     return response.data;
   }
 
+  // Courses
+  async getCourses(params?: {
+    page?: number;
+    limit?: number;
+    level?: 'débutant' | 'intermédiaire' | 'avancé';
+    format?: 'en ligne' | 'présentiel' | 'mixte';
+    price_min?: number;
+    price_max?: number;
+    instructor_id?: string;
+    sort?: 'price_asc' | 'price_desc' | 'rating_desc' | 'created_at_desc';
+    search?: string;
+  }) {
+    const response = await this.client.get('/api/courses', { params });
+    return response.data;
+  }
+
+  async getCourse(id: string) {
+    const response = await this.client.get(`/api/courses/${id}`);
+    return response.data;
+  }
+
+  async getCourseLessons(courseId: string) {
+    const response = await this.client.get(`/api/courses/${courseId}/lessons`);
+    return response.data;
+  }
+
+  async getCourseReviews(courseId: string) {
+    const response = await this.client.get(`/api/courses/${courseId}/reviews`);
+    return response.data;
+  }
+
+  async enrollInCourse(courseId: string) {
+    const response = await this.client.post(`/api/courses/enrollments`, { course_id: courseId });
+    return response.data;
+  }
+
+  async getMyEnrollments() {
+    const response = await this.client.get('/api/courses/enrollments/me');
+    return response.data;
+  }
+
+  // Coupons
+  async validateCoupon(code: string, orderTotal: number, productCategories?: string[]) {
+    const response = await this.client.post('/api/coupons/validate', {
+      code,
+      order_total: orderTotal,
+      product_categories: productCategories,
+    });
+    return response.data;
+  }
+
+  async getActiveCoupons() {
+    const response = await this.client.get('/api/coupons');
+    return response.data;
+  }
+
+  // Product Reviews
+  async getProductReviews(productId: string, params?: {
+    page?: number;
+    limit?: number;
+    rating?: number;
+    sort?: 'newest' | 'oldest' | 'rating_desc' | 'rating_asc' | 'helpful';
+    is_verified?: boolean;
+    is_featured?: boolean;
+  }) {
+    const response = await this.client.get(`/api/products/${productId}/reviews`, { params });
+    return response.data;
+  }
+
+  async getProductReviewStats(productId: string) {
+    const response = await this.client.get(`/api/products/${productId}/reviews/stats`);
+    return response.data;
+  }
+
+  async createProductReview(productId: string, data: {
+    rating: number;
+    title?: string;
+    comment?: string;
+    photos?: string[];
+    order_id?: string;
+  }) {
+    const response = await this.client.post(`/api/products/${productId}/reviews`, {
+      product_id: productId,
+      ...data,
+    });
+    return response.data;
+  }
+
+  async updateProductReview(reviewId: string, data: {
+    rating?: number;
+    title?: string;
+    comment?: string;
+    photos?: string[];
+  }) {
+    const response = await this.client.put(`/api/reviews/${reviewId}`, data);
+    return response.data;
+  }
+
+  async markReviewAsHelpful(reviewId: string) {
+    const response = await this.client.post(`/api/reviews/${reviewId}/helpful`);
+    return response.data;
+  }
+
   // Exposer le client axios pour les appels personnalisés
   get axiosClient() {
     return this.client;

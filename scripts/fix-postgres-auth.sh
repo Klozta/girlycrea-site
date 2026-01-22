@@ -19,3 +19,4 @@ echo "Test connexion:"
 PGPASSWORD=local_dev_password psql -U girlycrea_user -d girlycrea -h localhost -c "SELECT version();"
 
 
+

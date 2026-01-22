@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copier package files
+COPY package*.json ./
+
+# Installer dependencies
+RUN npm install
+
+# Copier source code
+COPY . .
+
+EXPOSE 3000
+
+# Hot reload
+ENV HOSTNAME="0.0.0.0"
+ENV PORT=3000
+
+CMD ["npm", "run", "dev"]
+

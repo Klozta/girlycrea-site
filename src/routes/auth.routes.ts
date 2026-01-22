@@ -132,6 +132,26 @@ async (req: RequestWithUser, res) => {
 
       await saveRefreshToken(user.id, refreshTokenStr, expiresAt);
 
+      // Envoyer l'email de bienvenue (non-bloquant)
+      try {
+        const { sendWelcomeEmail } = await import('../services/emailService.js');
+        // Générer un code promo de bienvenue si configuré
+        const welcomeDiscountCode = process.env.WELCOME_DISCOUNT_CODE || undefined;
+        await sendWelcomeEmail({
+          to: email,
+          name: name,
+          userId: user.id,
+          discountCode: welcomeDiscountCode,
+        });
+      } catch (emailError) {
+        // Non-bloquant: on log mais on ne fait pas échouer l'inscription
+        logger.warn('Erreur envoi email bienvenue (non-blocking)', {
+          userId: user.id,
+          email,
+          error: emailError instanceof Error ? emailError.message : String(emailError),
+        });
+      }
+
       // Définir cookies HTTP-only pour sécurité
       const isProduction = process.env.NODE_ENV === 'production';
 

@@ -1,6 +1,6 @@
 // backend/src/services/productsService.ts
 import crypto from 'crypto';
-import { supabase } from '../config/supabase.js';
+import { supabase, pgPool } from '../config/supabase.js';
 import {
     FilterProductsInput,
     Pagination,
@@ -19,6 +19,9 @@ import { createError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { isNetworkError, retry } from '../utils/retry.js';
 import { validateProductData } from '../validations/productSchemas.js';
+
+// Utiliser PostgreSQL directement si disponible, sinon Supabase
+const useDirectPg = pgPool !== null;
 
 function isSupabaseRetryable(error: unknown): boolean {
   if (!error) return false;
@@ -59,6 +62,105 @@ export async function getProducts(filters: FilterProductsInput): Promise<{ produ
   const limit = Math.min(100, Math.max(1, filters.limit || 20));
   const offset = (page - 1) * limit;
 
+  // Utiliser PostgreSQL direct si disponible
+  if (useDirectPg && pgPool) {
+    try {
+      let whereConditions: string[] = ['is_deleted = false'];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      // Filtres
+      if (filters.category) {
+        whereConditions.push(`category = $${paramIndex++}`);
+        params.push(filters.category);
+      }
+      if (filters.minPrice !== undefined) {
+        whereConditions.push(`price >= $${paramIndex++}`);
+        params.push(filters.minPrice);
+      }
+      if (filters.maxPrice !== undefined) {
+        whereConditions.push(`price <= $${paramIndex++}`);
+        params.push(filters.maxPrice);
+      }
+      if (filters.stockStatus && filters.stockStatus !== 'any') {
+        switch (filters.stockStatus) {
+          case 'in_stock':
+            whereConditions.push(`stock > 5`);
+            break;
+          case 'low_stock':
+            whereConditions.push(`stock >= 1 AND stock <= 5`);
+            break;
+          case 'out_of_stock':
+            whereConditions.push(`stock = 0`);
+            break;
+        }
+      }
+
+      // Tri
+      let orderBy = 'created_at DESC';
+      switch (filters.sort) {
+        case 'price_asc':
+          orderBy = 'price ASC';
+          break;
+        case 'price_desc':
+          orderBy = 'price DESC';
+          break;
+        case 'stock_asc':
+          orderBy = 'stock ASC';
+          break;
+        default:
+          orderBy = 'created_at DESC';
+      }
+
+      // Requête pour compter le total
+      const countQuery = `SELECT COUNT(*) as total FROM products WHERE ${whereConditions.join(' AND ')}`;
+      const countResult = await pgPool.query(countQuery, params);
+      const total = parseInt(countResult.rows[0].total);
+
+      // Requête pour récupérer les produits
+      const selectQuery = `
+        SELECT id, title, price, description, images, category, stock, created_at, tags
+        FROM products
+        WHERE ${whereConditions.join(' AND ')}
+        ORDER BY ${orderBy}
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      `;
+      params.push(limit, offset);
+
+      const result = await pgPool.query(selectQuery, params);
+      let products = result.rows as Product[];
+
+      // Filtrer par tags (multi-sélection) - doit contenir au moins un des tags sélectionnés
+      if (filters.tags && filters.tags.length > 0) {
+        products = products.filter(product => {
+          if (!product.tags || product.tags.length === 0) return false;
+          return filters.tags!.some(tag => product.tags!.includes(tag));
+        });
+      }
+
+      // Filtrer les produits draft si includeDrafts n'est pas activé
+      if (!filters.includeDrafts) {
+        products = products.filter(product => !product.tags?.includes('draft'));
+      }
+
+      const totalPages = Math.ceil(total / limit);
+
+      const response = {
+        products,
+        pagination: { page, limit, total, totalPages }
+      };
+
+      // Cache avec TTL adaptatif
+      const cacheTTL = filters.category ? 600 : 300;
+      await setCache(cacheKey, response, cacheTTL);
+      return response;
+    } catch (error: any) {
+      logger.error('Database error in getProducts (PG)', error, { filters });
+      throw createError.database(`Erreur lors de la récupération des produits: ${error.message}`, error);
+    }
+  }
+
+  // Fallback Supabase
   // Optimisation: Sélectionner uniquement les colonnes nécessaires
   const selectFields = 'id,title,price,original_price,description,images,category,stock,rating,created_at,tags';
 

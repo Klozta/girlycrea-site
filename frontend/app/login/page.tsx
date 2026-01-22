@@ -1,29 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { toast } from 'react-hot-toast';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isAuthenticated } = useStore();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState('/');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
 
   useEffect(() => {
-    if (isAuthenticated) {
-      const redirect = searchParams.get('redirect') || '/';
-      router.push(redirect);
+    if (searchParams) {
+      setRedirectUrl(searchParams.get('redirect') || '/');
     }
-  }, [isAuthenticated, router, searchParams]);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push(redirectUrl);
+    }
+  }, [isAuthenticated, router, redirectUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,9 +37,8 @@ export default function LoginPage() {
 
     try {
       await login(formData.email, formData.password);
-      const redirect = searchParams.get('redirect') || '/';
       toast.success('Connexion réussie !');
-      router.push(redirect);
+      router.push(redirectUrl);
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Erreur lors de la connexion');
     } finally {
@@ -121,4 +126,14 @@ export default function LoginPage() {
   );
 }
 
-
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
+  );
+}

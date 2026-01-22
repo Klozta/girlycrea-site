@@ -1,0 +1,220 @@
+version: '3.9'
+
+services:
+  # ========================================
+  # PostgreSQL 15
+  # ========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: girlycrea-postgres-staging
+    
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-girlycrea_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-girlycrea}
+    
+    ports:
+      - "5433:5432"
+    
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    
+    networks:
+      - girlycrea-staging-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-girlycrea_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================
+  # Redis 7
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: girlycrea-redis-staging
+    
+    ports:
+      - "6380:6379"
+    
+    volumes:
+      - redis_staging_data:/data
+    
+    networks:
+      - girlycrea-staging-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================
+  # Backend API (Node.js/Express)
+  # ========================================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    container_name: girlycrea-backend-staging
+    
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL:-postgresql://girlycrea_user:local_dev_password@postgres:5432/girlycrea}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@girlycrea.com}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SKIP_CSRF_PROTECTION: ${SKIP_CSRF_PROTECTION:-true}
+      SUPABASE_URL: ${SUPABASE_URL:-https://placeholder.supabase.co}
+      SUPABASE_KEY: ${SUPABASE_KEY:-local-dev-key-not-needed}
+    
+    ports:
+      - "3001:3001"
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - girlycrea-staging-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ========================================
+  # Frontend (Next.js)
+  # ========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: girlycrea-frontend-staging
+    
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
+      NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-GirlyCrea}
+      NEXT_PUBLIC_STRIPE_PUBLIC_KEY: ${NEXT_PUBLIC_STRIPE_PUBLIC_KEY}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+    
+    ports:
+      - "3000:3000"
+    
+    depends_on:
+      backend:
+        condition: service_healthy
+    
+    networks:
+      - girlycrea-staging-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ========================================
+  # Nginx (Reverse Proxy)
+  # ========================================
+  nginx:
+    image: nginx:alpine
+    container_name: girlycrea-nginx-staging
+    
+    ports:
+      - "80:80"
+    
+    volumes:
+      - ./nginx/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+    
+    depends_on:
+      - backend
+      - frontend
+    
+    networks:
+      - girlycrea-staging-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ========================================
+# VOLUMES - Persistence
+# ========================================
+volumes:
+  postgres_staging_data:
+    driver: local
+  redis_staging_data:
+    driver: local
+
+# ========================================
+# NETWORKS - Isolation
+# ========================================
+networks:
+  girlycrea-staging-network:
+    driver: bridge

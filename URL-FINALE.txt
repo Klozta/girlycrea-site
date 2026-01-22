@@ -1,0 +1,19 @@
+✅ CONFIGURATION TERMINÉE !
+
+📱 URL À PARTAGER :
+http://192.168.1.40:3000
+
+🔧 Configuration :
+- Frontend : http://192.168.1.40:3000
+- Backend API : http://192.168.1.40:3001
+
+✅ Vérifications :
+1. Backend démarré sur port 3001
+2. Frontend démarré sur port 3000
+3. Port forwarding configuré
+4. Frontend configuré avec IP : 192.168.1.40
+
+📋 Pour tester :
+- Depuis Windows : http://localhost:3000
+- Depuis autre appareil : http://192.168.1.40:3000
+

@@ -1,0 +1,39 @@
+                                   Table "public.orders"
+        Column        |           Type           | Collation | Nullable |      Default      
+----------------------+--------------------------+-----------+----------+-------------------
+ id                   | uuid                     |           | not null | gen_random_uuid()
+ order_number         | text                     |           | not null | 
+ user_id              | uuid                     |           |          | 
+ status               | text                     |           | not null | 'pending'::text
+ total                | numeric(10,2)            |           | not null | 
+ shipping_first_name  | text                     |           | not null | 
+ shipping_last_name   | text                     |           | not null | 
+ shipping_email       | text                     |           | not null | 
+ shipping_phone       | text                     |           | not null | 
+ shipping_address     | text                     |           | not null | 
+ shipping_city        | text                     |           | not null | 
+ shipping_postal_code | text                     |           | not null | 
+ shipping_country     | text                     |           | not null | 'France'::text
+ promo_code           | text                     |           |          | 
+ created_at           | timestamp with time zone |           |          | now()
+ updated_at           | timestamp with time zone |           |          | now()
+Indexes:
+    "orders_pkey" PRIMARY KEY, btree (id)
+    "idx_orders_created_at" btree (created_at DESC)
+    "idx_orders_order_number" btree (order_number)
+    "idx_orders_status" btree (status)
+    "idx_orders_user_id" btree (user_id)
+    "orders_order_number_key" UNIQUE CONSTRAINT, btree (order_number)
+Check constraints:
+    "orders_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text]))
+    "orders_total_check" CHECK (total >= 0::numeric)
+Foreign-key constraints:
+    "orders_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+Referenced by:
+    TABLE "coupon_usage" CONSTRAINT "coupon_usage_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+    TABLE "order_items" CONSTRAINT "order_items_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "product_reviews" CONSTRAINT "product_reviews_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+Policies (row security enabled): (none)
+Triggers:
+    orders_updated_at_trigger BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_orders_updated_at()
+

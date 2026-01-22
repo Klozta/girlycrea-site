@@ -1,0 +1,56 @@
+# ========================
+# BUILD STAGE - Compiler Next.js
+# ========================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm ci
+
+COPY . .
+
+# Build Next.js en mode standalone (réduit l'image)
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# ========================
+# RUNTIME STAGE - Image production minimale
+# ========================
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Installer dumb-init et wget pour health check
+RUN apk add --no-cache dumb-init wget
+
+# Créer user non-root
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copier le build Next.js (standalone mode)
+# Copier .next/standalone qui contient node_modules + server.js
+COPY --from=builder --chown=nodejs:nodejs /app/.next/standalone ./
+# Copier les assets statiques
+COPY --from=builder --chown=nodejs:nodejs /app/.next/static ./.next/static
+# Copier public files
+COPY --from=builder --chown=nodejs:nodejs /app/public ./public
+
+USER nodejs
+
+# Variables d'environnement pour Next.js
+ENV HOSTNAME="0.0.0.0"
+ENV PORT=3000
+ENV NODE_ENV=production
+
+# Health check - teste la page d'accueil
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
+
+EXPOSE 3000
+
+# Démarrer avec dumb-init pour graceful shutdown
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "server.js"]
+

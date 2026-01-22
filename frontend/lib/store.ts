@@ -114,7 +114,9 @@ export const useStore = create<AppState>()(
       },
 
       checkAuth: async () => {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        if (typeof window === 'undefined') return;
+        
+        const token = localStorage.getItem('accessToken');
         if (!token) {
           set({ user: null, isAuthenticated: false });
           return;
@@ -123,31 +125,32 @@ export const useStore = create<AppState>()(
         try {
           const user = await api.getMe();
           set({ user, isAuthenticated: true });
-        } catch (error) {
+        } catch (error: any) {
+          // Token invalide ou expiré - gérer gracieusement sans propager l'erreur
+          console.warn('Auth check failed (silent):', error?.message || 'Unknown error');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
           set({ user: null, isAuthenticated: false });
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-          }
+          // Ne pas propager l'erreur pour éviter les exceptions non gérées
         }
       },
 
       // Cart actions
       addToCart: (product, quantity = 1) => {
         const cart = api.addToCart(product, quantity);
-        const cartCount = cart.reduce((sum: number, item) => sum + item.quantity, 0);
+        const cartCount = cart.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
         set({ cart, cartCount });
       },
 
       removeFromCart: (productId) => {
         const cart = api.removeFromCart(productId);
-        const cartCount = cart.reduce((sum: number, item) => sum + item.quantity, 0);
+        const cartCount = cart.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
         set({ cart, cartCount });
       },
 
       updateCartQuantity: (productId, quantity) => {
         const cart = api.updateCartQuantity(productId, quantity);
-        const cartCount = cart.reduce((sum: number, item) => sum + item.quantity, 0);
+        const cartCount = cart.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
         set({ cart, cartCount });
       },
 
@@ -158,6 +161,7 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'girlycrea-store',
+      skipHydration: true,  // 🔑 Évite le mismatch SSR/Client avec localStorage
       partialize: (state) => ({
         cart: state.cart,
         cartCount: state.cartCount,

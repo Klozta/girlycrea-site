@@ -73,3 +73,4 @@ echo "   psql -U $LOCAL_USER -d $LOCAL_DB -c 'SELECT COUNT(*) FROM users;'"
 echo ""
 
 
+
