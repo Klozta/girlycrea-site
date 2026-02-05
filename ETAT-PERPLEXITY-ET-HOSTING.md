@@ -116,3 +116,15 @@ Tu peux t’inspirer de ça (à adapter) :
 | **Peux-tu contacter ton ami ?** | **Oui.** Tu peux lui dire que le projet est fonctionnel, hostable, et qu’il reste à configurer env, SSL et backups sur son serveur. |
 
 Tu peux t’appuyer sur ce fichier (`ETAT-PERPLEXITY-ET-HOSTING.md`) pour te rappeler où on en est et quoi dire à ton ami.
+
+---
+
+## 5. À faire / ce qui peut manquer (optionnel)
+
+| Élément | Statut | Action si besoin |
+|--------|--------|-------------------|
+| **Git push** | ✅ Fait | Commit poussé sur `origin/main`. |
+| **Fichier erroné** | À nettoyer | Supprimer le fichier dont le nom est une commande `psql` collée par erreur à la racine. |
+| **Frontend `.env.example`** | Optionnel | README frontend dit `cp .env.example .env.local` mais pas de `frontend/.env.example`. Créer un avec `NEXT_PUBLIC_API_URL=http://localhost:3001` ou adapter le README. |
+| **Secrets / prod** | Sur le serveur | Remplir les vrais secrets (JWT, Stripe, email, DB) ; ne jamais les committer. |
+| **SSL / backups** | Sur le serveur | HTTPS (Certbot) et backups PostgreSQL une fois hébergé. |
