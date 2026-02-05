@@ -1,0 +1,51 @@
+// ========================================
+// EXEMPLE D'INTÉGRATION DES MIGRATIONS DANS src/index.ts
+// ========================================
+// 
+// Ajoutez ces lignes au début de la fonction startServer()
+// pour exécuter les migrations automatiquement au démarrage
+// ========================================
+
+import { runMigrationsAndSeed } from './db/migrate.js';
+
+// ... autres imports ...
+
+async function startServer() {
+  try {
+    // 🔧 EXÉCUTER LES MIGRATIONS AVANT DE DÉMARRER LE SERVEUR
+    if (process.env.RUN_MIGRATIONS !== 'false') {
+      logger.info('🔧 Exécution des migrations de base de données...');
+      try {
+        await runMigrationsAndSeed();
+        logger.info('✅ Migrations terminées avec succès');
+      } catch (error: any) {
+        logger.error('❌ Erreur lors des migrations', error);
+        // En développement, on peut continuer même si les migrations échouent
+        // En production, on devrait arrêter le serveur
+        if (process.env.NODE_ENV === 'production') {
+          throw error;
+        }
+      }
+    } else {
+      logger.info('⏭️  Migrations ignorées (RUN_MIGRATIONS=false)');
+    }
+
+    // Démarrer le serveur Express
+    const PORT = process.env.PORT || 3001;
+    const server = app.listen(Number(PORT), HOST, () => {
+      logger.info('GirlyCrea Backend started', {
+        host: HOST,
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+        healthCheck: `http://localhost:${PORT}/health`,
+      });
+    });
+
+    // ... reste du code de démarrage ...
+  } catch (error) {
+    logger.error('❌ Erreur au démarrage du serveur', error);
+    process.exit(1);
+  }
+}
+
+startServer();
